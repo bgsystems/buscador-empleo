@@ -1,0 +1,74 @@
+"""Self-checks mínimos: parseo JSON del evaluador, dedup de db, formato Telegram.
+
+Correr con: python test_buscador.py
+"""
+import tempfile
+
+from buscador import db, notificador
+from buscador.evaluador import _parsear_json
+from buscador.fuentes import coincide_keywords
+
+
+def test_parseo_json():
+    # JSON limpio
+    ev = _parsear_json('{"match_score": 85, "resumen_puesto": "x"}')
+    assert ev["match_score"] == 85
+    # JSON envuelto en markdown
+    ev = _parsear_json('```json\n{"match_score": "70"}\n```')
+    assert ev["match_score"] == 70
+    # Sin JSON → error
+    try:
+        _parsear_json("no hay json acá")
+        assert False, "debía fallar"
+    except ValueError:
+        pass
+
+
+def test_dedup():
+    with tempfile.NamedTemporaryFile(suffix=".db") as f:
+        con = db.conectar(f.name)
+        oferta = {"url": "http://x/1", "titulo": "Admin", "empresa": "ACME", "fuente": "test"}
+        assert db.es_nueva(con, oferta["url"])
+        db.guardar(con, oferta, "evaluada", 50, "{}")
+        assert not db.es_nueva(con, oferta["url"])
+        # Upsert no duplica
+        db.guardar(con, oferta, "notificada", 90, "{}")
+        filas = con.execute("SELECT COUNT(*), MAX(score) FROM ofertas").fetchone()
+        assert filas == (1, 90)
+
+
+def test_keywords_y_formato():
+    assert coincide_keywords({"titulo": "Analista de RRHH", "descripcion": ""})
+    assert not coincide_keywords({"titulo": "Chief Legal Officer", "descripcion": "law firm"})
+    msg = notificador.formatear(
+        {"url": "http://x", "titulo": "Admin <b>", "empresa": "ACME"},
+        {"match_score": 88, "resumen_puesto": "r", "puntos_fuertes": ["a"],
+         "gaps_o_faltantes": [], "carta_presentacion_sugerida": "hola"},
+    )
+    assert "88%" in msg and "&lt;b&gt;" in msg  # escapa HTML del título
+
+
+def test_scraper_parsers():
+    # Fixtures mínimas offline: si cambia el HTML de los sitios, esto no lo detecta,
+    # pero sí detecta roturas en nuestras regex/parseo.
+    from scraper.linkedin import _tarjetas
+    from scraper.computrabajo import _jobposting
+    li = ('<li><a href="https://ar.linkedin.com/jobs/view/admin-at-acme-123?x=1">'
+          '<h3 class="base-search-card__title"> Admin &amp; RRHH </h3>'
+          '<h4 class="base-search-card__subtitle"><a>ACME</a></h4>'
+          '<span class="job-search-card__location"> CABA </span></li>')
+    t = list(_tarjetas(li))
+    assert t == [("https://www.linkedin.com/jobs/view/123", "123",
+                  "Admin & RRHH", "ACME", "CABA")]
+    ct = ('<script type="application/ld+json">{"@graph": [{"@type": "WebPage"},'
+          '{"@type": "JobPosting", "title": "Data Entry"}]}</script>')
+    assert _jobposting(ct)["title"] == "Data Entry"
+    assert _jobposting("<html>sin json</html>") is None
+
+
+if __name__ == "__main__":
+    test_parseo_json()
+    test_dedup()
+    test_keywords_y_formato()
+    test_scraper_parsers()
+    print("OK: todos los checks pasaron")
