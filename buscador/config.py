@@ -18,12 +18,14 @@ def _cargar_env():
 
 _cargar_env()
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+LITELLM_API_BASE = os.environ.get("LITELLM_API_BASE", "https://litellm.home.arpa/v1")
+LITELLM_TOKEN = os.environ.get("LITELLM_TOKEN", "")
+LITELLM_MODEL = os.environ.get("LITELLM_MODEL", "gemini-3.8-flash")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 UMBRAL_MATCH = int(os.environ.get("UMBRAL_MATCH", "75"))
 
-# Tope de evaluaciones Gemini por corrida (free tier tiene rate limit bajo)
+# Límites conservadores para evitar corridas largas y picos de consumo.
 MAX_EVALUACIONES_POR_CORRIDA = 20
 PAUSA_ENTRE_LLAMADAS_SEG = 12
 

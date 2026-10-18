@@ -12,7 +12,7 @@ log = logging.getLogger("buscador")
 
 def main():
     # Validar configuración antes de arrancar (evita corridas a medias)
-    faltan = [n for n in ("GEMINI_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID")
+    faltan = [n for n in ("LITELLM_TOKEN", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID")
               if not getattr(config, n)]
     if faltan:
         log.error("Faltan variables en .env: %s", ", ".join(faltan))

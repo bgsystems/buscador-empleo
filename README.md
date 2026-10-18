@@ -1,12 +1,12 @@
 # Buscador de Empleos Automatizado
 
-Pipeline que busca ofertas de empleo, las evalúa con IA (Gemini) contra el CV y
+Pipeline que busca ofertas de empleo, las evalúa con IA (LiteLLM) contra el CV y
 preferencias de la candidata, y notifica por Telegram solo los matches altos con
 un pitch de postulación listo para usar.
 
 ```
 [ Remotive API / RSS / Scrapers (LinkedIn, Computrabajo) ] → [ dedup SQLite ]
-   → [ filtro keywords ] → [ Gemini: match_score + pitch ] → [ score ≥ umbral → Telegram ]
+   → [ filtro keywords ] → [ LiteLLM: match_score + pitch ] → [ score ≥ umbral → Telegram ]
 ```
 
 **No postula automáticamente**: la cuenta de la candidata nunca se toca.
@@ -22,10 +22,17 @@ cp .env.example .env   # completar credenciales (ver abajo)
 
 | Variable | Cómo obtenerla |
 |---|---|
-| `GEMINI_API_KEY` | https://aistudio.google.com/apikey (free tier) |
+| `LITELLM_API_BASE` | URL base de la API del proxy (default `https://litellm.home.arpa/v1`) |
+| `LITELLM_MODEL` | Alias configurado en LiteLLM (default `gemini-3.8-flash`) |
+| `LITELLM_TOKEN` | Virtual key dedicada creada en LiteLLM; en Kubernetes la inyecta `busqueda-config` |
 | `TELEGRAM_BOT_TOKEN` | Hablar con [@BotFather](https://t.me/BotFather) → `/newbot` |
 | `TELEGRAM_CHAT_ID` | **Primero** mandarle `/start` al bot en Telegram, **después** consultar `https://api.telegram.org/bot<TOKEN>/getUpdates` → `chat.id` (si devuelve `[]`, el bot aún no recibió ningún mensaje) |
 | `UMBRAL_MATCH` | Opcional, default 75 |
+
+La llamada a LiteLLM omite la validación del certificado TLS, ya que el proxy
+interno presenta el certificado por defecto de Traefik. Usar solo en una red de
+confianza; si el proxy obtiene un certificado válido, volver a habilitarla.
+El CronJob de Kubernetes usa el Service interno de LiteLLM y HTTP en el cluster.
 
 ### Perfil de la candidata
 
@@ -59,10 +66,9 @@ python test_buscador.py     # self-checks
 ## Troubleshooting
 
 - **"Faltan variables en .env"**: copiar `.env.example` a `.env` y completar.
-- **Evaluaciones que fallan (429)**: el free tier limita por modelo y por día
-  (gemini-3.6-flash: 20 req/día). El evaluador hace fallback automático entre
-  los modelos de `MODELOS` (`buscador/evaluador.py`); si todos se agotan,
-  las ofertas quedan en estado `error` y se reintentan en la próxima corrida.
+- **Evaluaciones que fallan (401/429/5xx)**: comprobar la virtual key, el alias
+  y el estado/cuota del proveedor configurado en LiteLLM. Las ofertas quedan en
+  estado `error` y se reintentan en la próxima corrida.
 - **No llegan mensajes de Telegram**: verificar que iniciaste chat con el bot
   (mandarle `/start`) y que el `chat_id` es correcto.
 - **Pocas ofertas relevantes**: agregar feeds en `FEEDS_RSS` y ampliar `KEYWORDS`

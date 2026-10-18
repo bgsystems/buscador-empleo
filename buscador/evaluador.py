@@ -1,4 +1,4 @@
-"""Evaluación de ofertas con Gemini API (REST, sin SDK)."""
+"""Evaluación de ofertas a través de la API OpenAI-compatible de LiteLLM."""
 import json
 import logging
 import re
@@ -8,14 +8,6 @@ import requests
 from . import config
 
 log = logging.getLogger(__name__)
-
-_URL = ("https://generativelanguage.googleapis.com/v1beta/models/"
-        "{modelo}:generateContent")
-
-# Fallback: cada modelo tiene su propia cuota diaria en el free tier
-# (gemini-3.6-flash: solo 20 req/día). Si uno se agota, se pasa al siguiente.
-MODELOS = ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
-_modelo_idx = 0
 
 _PROMPT = """Actúa como un reclutador experto IT/Corporativo en Argentina.
 
@@ -51,7 +43,7 @@ def _parsear_json(texto):
     """Parseo tolerante: extrae el primer bloque {...} aunque venga con markdown."""
     m = re.search(r"\{.*\}", texto, re.DOTALL)
     if not m:
-        raise ValueError(f"Sin JSON en respuesta: {texto[:200]}")
+        raise ValueError("Respuesta sin JSON")
     datos = json.loads(m.group(0))
     datos["match_score"] = int(datos.get("match_score", 0))
     return datos
@@ -59,35 +51,29 @@ def _parsear_json(texto):
 
 def evaluar(oferta, cv, preferencias):
     """Devuelve dict con la evaluación, o None si falla la llamada."""
-    global _modelo_idx
     prompt = _PROMPT.format(
         cv=cv, preferencias=preferencias,
         titulo=oferta["titulo"], empresa=oferta.get("empresa", "?"),
         ubicacion=oferta.get("ubicacion", "?"),
         descripcion=oferta.get("descripcion", "")[:6000],
     )
-    while _modelo_idx < len(MODELOS):
-        modelo = MODELOS[_modelo_idx]
-        try:
-            r = requests.post(
-                _URL.format(modelo=modelo),
-                params={"key": config.GEMINI_API_KEY},
-                json={"contents": [{"parts": [{"text": prompt}]}],
-                      "generationConfig": {"temperature": 0.2,
-                                           "responseMimeType": "application/json"}},
-                timeout=60,
-            )
-            if r.status_code == 429:
-                # Cuota del modelo agotada: pasar al siguiente por el resto de la corrida
-                _modelo_idx += 1
-                log.info("429 en %s, cambio a %s", modelo,
-                         MODELOS[_modelo_idx] if _modelo_idx < len(MODELOS) else "ninguno")
-                continue
-            r.raise_for_status()
-            texto = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-            return _parsear_json(texto)
-        except (requests.RequestException, KeyError, ValueError, IndexError) as e:
-            log.warning("Evaluación falló para %s: %s", oferta["url"], e)
-            return None
-    log.warning("Todos los modelos agotaron cuota")
-    return None
+    try:
+        r = requests.post(
+            f"{config.LITELLM_API_BASE.rstrip('/')}/chat/completions",
+            headers={"Authorization": f"Bearer {config.LITELLM_TOKEN}"},
+            json={"model": config.LITELLM_MODEL,
+                  "messages": [{"role": "user", "content": prompt}],
+                  "temperature": 0.2,
+                  "response_format": {"type": "json_object"}},
+            # ponytail: internal proxy has no hostname-valid certificate; trust its CA if that changes.
+            verify=False,
+            timeout=60,
+        )
+        r.raise_for_status()
+        texto = r.json()["choices"][0]["message"]["content"]
+        if not isinstance(texto, str):
+            raise ValueError("Respuesta del modelo sin contenido de texto")
+        return _parsear_json(texto)
+    except (requests.RequestException, KeyError, ValueError, IndexError, TypeError) as e:
+        log.warning("Evaluación falló para %s: %s", oferta["url"], type(e).__name__)
+        return None

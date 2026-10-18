@@ -4,7 +4,7 @@ Correr con: python test_buscador.py
 """
 import tempfile
 
-from buscador import db, notificador
+from buscador import db, evaluador, notificador
 from buscador.evaluador import _parsear_json
 from buscador.fuentes import coincide_keywords
 
@@ -22,6 +22,40 @@ def test_parseo_json():
         assert False, "debía fallar"
     except ValueError:
         pass
+
+
+def test_evaluar_via_litellm():
+    class Respuesta:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"choices": [{"message": {
+                "content": '{"match_score": 82, "resumen_puesto": "x"}'
+            }}]}
+
+    llamada = {}
+
+    def post(url, **kwargs):
+        llamada.update(url=url, **kwargs)
+        return Respuesta()
+
+    original_post = evaluador.requests.post
+    evaluador.requests.post = post
+    try:
+        resultado = evaluador.evaluar(
+            {"url": "https://example.test/job", "titulo": "Analista"},
+            "cv de prueba", "preferencias de prueba",
+        )
+    finally:
+        evaluador.requests.post = original_post
+
+    assert resultado["match_score"] == 82
+    assert llamada["url"].endswith("/v1/chat/completions")
+    assert llamada["headers"]["Authorization"] == f"Bearer {evaluador.config.LITELLM_TOKEN}"
+    assert llamada["json"]["model"] == evaluador.config.LITELLM_MODEL
+    assert llamada["json"]["response_format"] == {"type": "json_object"}
+    assert llamada["verify"] is False
 
 
 def test_dedup():
@@ -68,6 +102,7 @@ def test_scraper_parsers():
 
 if __name__ == "__main__":
     test_parseo_json()
+    test_evaluar_via_litellm()
     test_dedup()
     test_keywords_y_formato()
     test_scraper_parsers()
