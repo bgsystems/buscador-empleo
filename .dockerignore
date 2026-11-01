@@ -1,0 +1,8 @@
+*
+!Dockerfile
+!requirements.txt
+!test_buscador.py
+!buscador/
+!buscador/*.py
+!scraper/
+!scraper/*.py

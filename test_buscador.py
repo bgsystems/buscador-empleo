@@ -3,10 +3,27 @@
 Correr con: python test_buscador.py
 """
 import tempfile
+import os
+import subprocess
+import sys
 
 from buscador import db, evaluador, notificador
 from buscador.evaluador import _parsear_json
 from buscador.fuentes import coincide_keywords
+
+
+def test_rutas_configurables():
+    subprocess.run(
+        [sys.executable, "-c",
+         "from buscador import config; from pathlib import Path; "
+         "assert config.DB_PATH == Path('/state/check.db'); "
+         "assert config.CV_PATH == Path('/profile/check.txt'); "
+         "assert config.PREFERENCIAS_PATH == Path('/profile/preferences.txt')"],
+        env={**os.environ, "DB_PATH": "/state/check.db",
+             "CV_PATH": "/profile/check.txt",
+             "PREFERENCIAS_PATH": "/profile/preferences.txt"},
+        check=True,
+    )
 
 
 def test_parseo_json():
@@ -51,7 +68,7 @@ def test_evaluar_via_litellm():
         evaluador.requests.post = original_post
 
     assert resultado["match_score"] == 82
-    assert llamada["url"].endswith("/v1/chat/completions")
+    assert llamada["url"] == evaluador.config.LITELLM_API_BASE.rstrip("/") + "/chat/completions"
     assert llamada["headers"]["Authorization"] == f"Bearer {evaluador.config.LITELLM_TOKEN}"
     assert llamada["json"]["model"] == evaluador.config.LITELLM_MODEL
     assert llamada["json"]["response_format"] == {"type": "json_object"}
@@ -101,6 +118,7 @@ def test_scraper_parsers():
 
 
 if __name__ == "__main__":
+    test_rutas_configurables()
     test_parseo_json()
     test_evaluar_via_litellm()
     test_dedup()

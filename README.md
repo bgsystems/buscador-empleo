@@ -55,6 +55,31 @@ python test_buscador.py     # self-checks
 0 */4 * * * cd /ruta/al/buscador-empleos && /usr/bin/python3 -m buscador >> buscador.log 2>&1
 ```
 
+### Contenedor
+
+```bash
+docker build -t buscador-empleo .
+docker run --rm --network none buscador-empleo python test_buscador.py
+docker run --rm --env-file .env \
+  --mount type=bind,src="$(pwd)/perfil",dst=/profile,readonly \
+  --mount type=bind,src="$(pwd)/state",dst=/state \
+  buscador-empleo
+```
+
+Crear `state/` con permisos de escritura para UID/GID 1000. Para conservar
+deduplicación, trasladar la SQLite existente a `state/ofertas.db` antes de
+reemplazar una instalación. No ejecutar dos instancias sobre el mismo historial.
+La imagen incluye código y dependencias, nunca `.env`, perfiles ni SQLite.
+Las rutas se pueden ajustar con `DB_PATH`, `CV_PATH` y `PREFERENCIAS_PATH`;
+fuera del contenedor mantienen sus valores locales originales.
+
+GitHub Actions construye y ejecuta los self-checks en cada push a `main` o PR;
+solo publica en pushes a `main` o ejecuciones manuales. GHCR usa tags
+`sha-<commit>` y el resumen del build indica el digest para fijar en GitOps.
+Configurar el paquete `ghcr.io/bgsystems/buscador-empleo` como público para
+permitir pulls del homelab sin una credencial de registry adicional.
+El CronJob conserva su PVC y SealedSecret; no instala paquetes ni monta código.
+
 ## Salidas
 
 - Mensajes de Telegram con: score, puesto, empresa, puntos fuertes, gaps,

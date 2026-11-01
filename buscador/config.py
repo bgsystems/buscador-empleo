@@ -29,9 +29,9 @@ UMBRAL_MATCH = int(os.environ.get("UMBRAL_MATCH", "75"))
 MAX_EVALUACIONES_POR_CORRIDA = 20
 PAUSA_ENTRE_LLAMADAS_SEG = 12
 
-DB_PATH = RAIZ / "ofertas.db"
-CV_PATH = RAIZ / "perfil" / "cv.txt"
-PREFERENCIAS_PATH = RAIZ / "perfil" / "preferencias.txt"
+DB_PATH = Path(os.environ.get("DB_PATH", RAIZ / "ofertas.db"))
+CV_PATH = Path(os.environ.get("CV_PATH", RAIZ / "perfil" / "cv.txt"))
+PREFERENCIAS_PATH = Path(os.environ.get("PREFERENCIAS_PATH", RAIZ / "perfil" / "preferencias.txt"))
 
 # Keywords para filtrar títulos de ofertas antes de gastar llamadas a la IA.
 # Derivadas del perfil: administrativa/RRHH + soporte IT + frontend/QA junior.
