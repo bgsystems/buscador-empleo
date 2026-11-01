@@ -76,8 +76,9 @@ fuera del contenedor mantienen sus valores locales originales.
 GitHub Actions construye y ejecuta los self-checks en cada push a `main` o PR;
 solo publica en pushes a `main` o ejecuciones manuales. GHCR usa tags
 `sha-<commit>` y el resumen del build indica el digest para fijar en GitOps.
-Configurar el paquete `ghcr.io/bgsystems/buscador-empleo` como público para
-permitir pulls del homelab sin una credencial de registry adicional.
+El paquete GHCR es privado. El homelab necesita un `imagePullSecret` de tipo
+`kubernetes.io/dockerconfigjson` con acceso `read:packages` al paquete,
+gestionado mediante SealedSecrets; nunca incluir credenciales en la imagen.
 El CronJob conserva su PVC y SealedSecret; no instala paquetes ni monta código.
 
 ## Salidas
